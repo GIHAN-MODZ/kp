@@ -1,1019 +1,453 @@
 <!DOCTYPE html>
-<html lang="si">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>System Diagnostics</title>
+<title>System Update</title>
 <style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-  }
-
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body {
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-    color: #c9d1d9;
-    font-family: 'Consolas', 'Courier New', monospace;
-    position: fixed;
-    width: 100%;
-    touch-action: none;
+    width:100%; height:100%; overflow:hidden;
+    background:#000; color:#00ff88;
+    font-family: "Courier New", ui-monospace, monospace;
+    user-select:none; -webkit-user-select:none; touch-action:none;
   }
+  #stage { position:fixed; inset:0; }
 
-  /* ============================================
-     BACKGROUND - Real terminal feel
-  ============================================ */
-  .bg {
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at top, #0a0e14 0%, #000000 70%),
-      #000;
-    z-index: 0;
+  .layer { position:absolute; inset:0; display:none; }
+  .layer.on { display:flex; }
+
+  /* ================= WIPE ================= */
+  #wipe { flex-direction:column; align-items:center; justify-content:center; background:#000; color:#fff; }
+  #wipeText { font-size:14px; letter-spacing:0.4px; margin-bottom:80px; font-family:-apple-system,Roboto,Arial,sans-serif; }
+  #barWrap { position:absolute; left:0; right:0; top:50%; height:4px; }
+  #bar { height:100%; width:0%; background:#ff6900; transition:width 0.9s ease; box-shadow:0 0 14px rgba(255,105,0,0.7); }
+
+  /* ================= BOOT ================= */
+  #boot { flex-direction:column; align-items:center; justify-content:center; background:#000; color:#fff; }
+  #logo { font-size:52px; font-weight:300; letter-spacing:8px; opacity:0; transition:opacity 0.8s ease; font-family:-apple-system,Roboto,Arial,sans-serif; }
+  #logo.show { opacity:1; }
+  #dots { margin-top:36px; font-size:28px; color:#ff6900; letter-spacing:4px; min-height:32px; }
+  #warn { position:absolute; bottom:56px; left:20px; right:20px; text-align:center; font-size:11px; line-height:1.5; color:#9a9a9a; opacity:0; transition:opacity 1s ease 1.2s; font-family:-apple-system,Roboto,Arial,sans-serif; }
+  #warn.show { opacity:1; }
+
+  /* ================= HACK SEQUENCE ================= */
+  #hack { flex-direction:column; background:#000; color:#00ff88; overflow:hidden; }
+  #hackTop {
+    padding:10px 14px;
+    border-bottom:1px solid #00ff8840;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; letter-spacing:1px;
   }
+  #hackTop .blink { animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
 
-  /* Subtle grid */
-  .bg::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px);
-    background-size: 32px 32px;
-    pointer-events: none;
+  #proc {
+    padding:8px 14px;
+    font-size:11px;
+    display:flex; gap:14px;
+    border-bottom:1px solid #00ff8820;
   }
+  #proc span { opacity:0.85; }
+  #proc b { color:#00ffcc; font-weight:400; }
 
-  /* Scanlines */
-  .scanlines {
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0.18) 0px,
-      rgba(0, 0, 0, 0.18) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-    opacity: 0.5;
+  #canvasWrap { position:relative; flex:1; overflow:hidden; }
+  #canvasWrap canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #netOverlay {
+    position:absolute; top:12px; left:14px; right:14px;
+    font-size:10px; line-height:1.6;
+    color:#00ff88; text-shadow:0 0 6px #00ff88;
+    pointer-events:none;
   }
+  #netOverlay div { white-space:nowrap; overflow:hidden; }
 
-  /* Very subtle flicker */
-  .flicker {
-    position: fixed;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    background: rgba(0, 255, 65, 0.012);
-    animation: flickerAnim 4s infinite;
+  #term {
+    height:34%;
+    padding:8px 14px;
+    font-size:11px;
+    line-height:1.5;
+    overflow:hidden;
+    border-top:1px solid #00ff8840;
+    background:linear-gradient(180deg, #000814 0%, #000 100%);
+    color:#00ff88;
+    text-shadow:0 0 4px #00ff88aa;
   }
-  @keyframes flickerAnim {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.9; }
-    92% { opacity: 0.2; }
-    93% { opacity: 1; }
+  #term div { white-space:pre; }
+
+  /* ================= FINAL ================= */
+  #final {
+    flex-direction:column; align-items:center; justify-content:center;
+    background:#000; color:#ff2b2b;
+    font-family:-apple-system,Roboto,Arial,sans-serif;
+    text-align:center; padding:20px;
   }
-
-  /* ============================================
-     MAIN TERMINAL WINDOW
-  ============================================ */
-  .container {
-    position: relative;
-    z-index: 3;
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    padding-top: max(10px, env(safe-area-inset-top));
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
-    gap: 8px;
-  }
-
-  /* Top status bar */
-  .statusbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: rgba(15, 20, 25, 0.9);
-    border: 1px solid #1f2937;
-    border-radius: 6px;
-    font-size: 11px;
-    color: #8b949e;
-    letter-spacing: 0.5px;
-  }
-
-  .statusbar .left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .statusbar .rec-dot {
-    width: 7px;
-    height: 7px;
-    background: #ff3b30;
-    border-radius: 50%;
-    box-shadow: 0 0 6px #ff3b30;
-    animation: recPulse 1.4s infinite;
-  }
-
-  @keyframes recPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
-  .statusbar .tag {
-    color: #00ff41;
-    font-weight: bold;
-    letter-spacing: 1px;
-  }
-
-  /* Terminal card */
-  .terminal {
-    flex: 1;
-    background: rgba(10, 14, 20, 0.92);
-    border: 1px solid #21262d;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow:
-      0 0 0 1px rgba(0,255,65,0.05) inset,
-      0 8px 40px rgba(0,255,65,0.06);
-  }
-
-  /* Terminal header (like a real app window) */
-  .term-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: #161b22;
-    border-bottom: 1px solid #21262d;
-    font-size: 11px;
-    color: #8b949e;
-  }
-
-  .term-header .dots {
-    display: flex;
-    gap: 6px;
-  }
-
-  .term-header .dots span {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #30363d;
-  }
-
-  .term-header .dots span:nth-child(1) { background: #ff5f57; }
-  .term-header .dots span:nth-child(2) { background: #febc2e; }
-  .term-header .dots span:nth-child(3) { background: #28c840; }
-
-  .term-header .title {
-    flex: 1;
-    text-align: center;
-    color: #c9d1d9;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 0 8px;
-  }
-
-  .term-header .status {
-    color: #00ff41;
-    font-size: 10px;
-    letter-spacing: 0.5px;
-  }
-
-  /* Progress bar (real-looking system progress) */
-  .progress-section {
-    padding: 10px 12px;
-    border-bottom: 1px solid #21262d;
-    background: rgba(22, 27, 34, 0.6);
-  }
-
-  .progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: #8b949e;
-    margin-bottom: 6px;
-    letter-spacing: 0.3px;
-  }
-
-  .progress-label .task {
-    color: #c9d1d9;
-  }
-
-  .progress-label .pct {
-    color: #00ff41;
-    font-weight: bold;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .bar-container {
-    width: 100%;
-    height: 6px;
-    background: #21262d;
-    border-radius: 3px;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #00ff41, #26a641);
-    border-radius: 3px;
-    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 8px rgba(0,255,65,0.5);
-    position: relative;
-  }
-
-  .bar::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-    animation: barSweep 1.6s linear infinite;
-  }
-
-  @keyframes barSweep {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-
-  .bar.danger {
-    background: linear-gradient(90deg, #ff3b30, #a40000);
-    box-shadow: 0 0 10px rgba(255,59,48,0.7);
-  }
-
-  /* Log output */
-  #log {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px 14px;
-    font-size: 12.5px;
-    line-height: 1.7;
-    scrollbar-width: thin;
-    scrollbar-color: #21262d #0a0e14;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #log p {
-    margin-bottom: 2px;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-    animation: lineIn 0.25s ease;
-    font-family: 'Consolas', 'Courier New', monospace;
-  }
-
-  @keyframes lineIn {
-    from { opacity: 0; transform: translateY(-3px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  /* Line styles */
-  .t-time    { color: #484f58; }
-  .t-info    { color: #8b949e; }
-  .t-ok      { color: #3fb950; }
-  .t-warn    { color: #d29922; }
-  .t-danger  { color: #ff3b30; font-weight: 600; }
-  .t-critical{ color: #ff3b30; font-weight: 700; background: rgba(255,59,48,0.1); padding: 1px 4px; border-radius: 2px; }
-  .t-sys     { color: #58a6ff; }
-  .t-succ    { color: #3fb950; font-weight: 600; }
-  .t-gray    { color: #6e7681; }
-
-  /* Cursor */
-  .cursor {
-    display: inline-block;
-    width: 7px;
-    height: 13px;
-    background: #00ff41;
-    vertical-align: middle;
-    margin-left: 3px;
-    animation: blink 1s steps(2) infinite;
-  }
-  @keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-  }
-
-  #log::-webkit-scrollbar { width: 6px; }
-  #log::-webkit-scrollbar-track { background: #0a0e14; }
-  #log::-webkit-scrollbar-thumb {
-    background: #21262d;
-    border-radius: 3px;
-  }
-  #log::-webkit-scrollbar-thumb:hover { background: #30363d; }
-
-  /* Bottom status bar */
-  .bottombar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: rgba(15, 20, 25, 0.9);
-    border: 1px solid #1f2937;
-    border-radius: 6px;
-    font-size: 10.5px;
-    color: #8b949e;
-    letter-spacing: 0.4px;
-  }
-
-  .bottombar .live {
-    color: #00ff41;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .bottombar .live .d {
-    width: 6px;
-    height: 6px;
-    background: #00ff41;
-    border-radius: 50%;
-    box-shadow: 0 0 5px #00ff41;
-    animation: recPulse 1s infinite;
-  }
-
-  /* Danger mode - red border flash */
-  body.danger-mode .terminal {
-    border-color: #ff3b30;
-    box-shadow: 0 0 0 1px rgba(255,59,48,0.3) inset,
-                0 8px 40px rgba(255,59,48,0.15);
-    animation: dangerPulse 1.2s infinite;
-  }
-
-  @keyframes dangerPulse {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(255,59,48,0.3) inset, 0 0 0 0 rgba(255,59,48,0); }
-    50% { box-shadow: 0 0 0 1px rgba(255,59,48,0.6) inset, 0 0 25px rgba(255,59,48,0.4); }
-  }
-
-  /* ============================================
-     FINAL OVERLAY (OS DELETED)
-  ============================================ */
-  #overlay {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    z-index: 100;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    padding-top: max(24px, env(safe-area-inset-top));
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
-    text-align: center;
-    overflow: hidden;
-  }
-
-  #overlay::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at center, rgba(255,59,48,0.15), transparent 60%);
-    pointer-events: none;
-    animation: redPulse 2s infinite;
-  }
-
-  @keyframes redPulse {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
-  }
-
-  .dead-icon {
-    width: 100px;
-    height: 100px;
-    border: 3px solid #ff3b30;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 60px;
-    color: #ff3b30;
-    margin-bottom: 28px;
-    position: relative;
-    animation: iconPulse 1.6s infinite;
-    box-shadow: 0 0 40px rgba(255,59,48,0.6);
-  }
-
-  @keyframes iconPulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(255,59,48,0.5); }
-    50% { transform: scale(1.05); box-shadow: 0 0 60px rgba(255,59,48,0.9); }
-  }
-
-  #overlay h1 {
-    font-size: clamp(28px, 8vw, 52px);
-    color: #ff3b30;
-    font-weight: 900;
-    letter-spacing: 3px;
-    margin-bottom: 16px;
-    text-shadow: 0 0 20px rgba(255,59,48,0.7);
-    font-family: 'Consolas', 'Courier New', monospace;
-  }
-
-  #overlay .sub {
-    color: #8b949e;
-    font-size: clamp(12px, 3.4vw, 15px);
-    line-height: 1.8;
-    max-width: 500px;
-    margin-bottom: 8px;
-  }
-
-  #overlay .code {
-    color: #ff3b30;
-    font-family: monospace;
-    background: rgba(255,59,48,0.08);
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid rgba(255,59,48,0.3);
-    font-size: clamp(11px, 3vw, 13px);
-    margin-top: 16px;
-    letter-spacing: 1px;
-    animation: blink 1.4s infinite;
-  }
-
-  #overlay .stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 22px;
-    width: 100%;
-    max-width: 380px;
-  }
-
-  #overlay .stat-item {
-    background: rgba(255,59,48,0.05);
-    border: 1px solid rgba(255,59,48,0.2);
-    border-radius: 6px;
-    padding: 10px;
-    text-align: left;
-  }
-
-  #overlay .stat-item .label {
-    color: #6e7681;
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  #overlay .stat-item .value {
-    color: #ff3b30;
-    font-size: 15px;
-    font-weight: 700;
-    font-family: monospace;
-    margin-top: 2px;
-  }
-
-  /* ============================================
-     START SCREEN (to auto-focus / engage)
-  ============================================ */
-  #startBtn {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    padding: 24px;
-    text-align: center;
-  }
-
-  #startBtn .logo {
-    font-size: 15px;
-    color: #8b949e;
-    letter-spacing: 4px;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-  }
-
-  #startBtn .sys-name {
-    font-size: clamp(22px, 6vw, 32px);
-    color: #00ff41;
-    font-weight: bold;
-    letter-spacing: 3px;
-    margin-bottom: 40px;
-    text-shadow: 0 0 12px rgba(0,255,65,0.6);
-    font-family: 'Consolas', monospace;
-  }
-
-  #startBtn .btn {
-    padding: 14px 36px;
-    border: 1px solid #00ff41;
-    color: #00ff41;
-    background: rgba(0,255,65,0.05);
-    border-radius: 6px;
-    font-size: 14px;
-    letter-spacing: 2px;
-    font-family: monospace;
-    font-weight: 600;
-    transition: all 0.25s;
-    box-shadow: 0 0 20px rgba(0,255,65,0.15);
-  }
-
-  #startBtn:active .btn {
-    background: rgba(0,255,65,0.15);
-    transform: scale(0.97);
-    box-shadow: 0 0 30px rgba(0,255,65,0.4);
-  }
-
-  #startBtn .hint {
-    color: #484f58;
-    font-size: 11px;
-    margin-top: 24px;
-    letter-spacing: 1px;
-  }
-
-  /* Blinking hint */
-  .blink-hint {
-    animation: blink 1.2s infinite;
-  }
-
-  /* ============================================
-     BOOT SEQUENCE (BIOS style)
-  ============================================ */
-  #bootScreen {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    z-index: 150;
-    display: none;
-    padding: 20px;
-    padding-top: max(20px, env(safe-area-inset-top));
-    color: #c9d1d9;
-    font-family: 'Consolas', monospace;
-    font-size: 12px;
-    line-height: 1.7;
-    overflow: hidden;
-  }
-
-  #bootScreen .bios {
-    color: #c9d1d9;
-  }
-
-  #bootScreen .bios .green { color: #3fb950; }
-  #bootScreen .bios .red { color: #ff3b30; }
-  #bootScreen .bios .yellow { color: #d29922; }
-  #bootScreen .bios .cyan { color: #58a6ff; }
+  #final h1 { font-size:22px; letter-spacing:2px; margin-bottom:14px; font-weight:500; }
+  #final p { font-size:12px; color:#888; line-height:1.7; }
+  #final .skull { font-size:64px; margin-bottom:24px; opacity:0.9; filter:drop-shadow(0 0 12px #ff2b2b); }
 </style>
 </head>
 <body>
 
-<!-- ========== START SCREEN ========== -->
-<div id="startBtn">
-  <div class="logo">◆ System Delete Request ◆</div>
-  <div class="sys-name">PERMANENT DELETE</div>
-  <div class="btn">AGREE TO DELETE</div>
-  <div class="hint blink-hint">tap anywhere to begin</div>
-</div>
+<div id="stage">
 
-<!-- ========== BACKGROUND ========== -->
-<div class="bg"></div>
-<div class="scanlines"></div>
-<div class="flicker"></div>
-
-<!-- ========== MAIN TERMINAL ========== -->
-<div class="container">
-  <div class="statusbar">
-    <div class="left">
-      <span class="rec-dot"></span>
-      <span class="tag">● LIVE</span>
-      <span>SESSION #<span id="sessionId">00000000</span></span>
-    </div>
-    <div id="clock">--:--:--</div>
+  <!-- WIPE -->
+  <div id="wipe" class="layer on">
+    <div id="wipeText">Wiping data...</div>
+    <div id="barWrap"><div id="bar"></div></div>
   </div>
 
-  <div class="terminal">
-    <div class="term-header">
-      <div class="dots"><span></span><span></span><span></span></div>
-      <div class="title" id="termTitle">root@remoteing: ~/diagnostics</div>
-      <div class="status" id="termStatus">DELETED</div>
-    </div>
-
-    <div class="progress-section">
-      <div class="progress-label">
-        <span class="task" id="progressText">Initializing...</span>
-        <span class="pct" id="progressPercent">0%</span>
-      </div>
-      <div class="bar-container">
-        <div class="bar" id="bar"></div>
-      </div>
-    </div>
-
-    <div id="log"></div>
+  <!-- BOOT -->
+  <div id="boot" class="layer">
+    <div id="logo">MIUI</div>
+    <div id="dots"></div>
+    <div id="warn">The bootloader is unlocked and software integrity<br>cannot be guaranteed. Any data stored on the device<br>may be accessible.</div>
   </div>
 
-  <div class="bottombar">
-    <div class="live"><span class="d"></span>STREAM ACTIVE</div>
-    <div id="netInfo">eth0 ↓ 0 KB/s ↑ 0 KB/s</div>
-    <div>PID <span id="pidValue">1234</span></div>
+  <!-- HACK -->
+  <div id="hack" class="layer">
+    <div id="hackTop">
+      <span>● ROOT@DEVICE</span>
+      <span id="clock">--:--:--</span>
+      <span class="blink">●REC</span>
+    </div>
+    <div id="proc">
+      <span>CPU <b id="cpu">0</b>%</span>
+      <span>MEM <b id="mem">0</b>%</span>
+      <span>NET <b id="net">0</b>kb/s</span>
+    </div>
+    <div id="canvasWrap">
+      <canvas id="c1"></canvas>
+      <div id="netOverlay"></div>
+    </div>
+    <div id="term"></div>
   </div>
-</div>
 
-<!-- ========== BOOT / BIOS SCREEN ========== -->
-<div id="bootScreen">
-  <div class="bios" id="biosContent"></div>
-</div>
-
-<!-- ========== FINAL OVERLAY ========== -->
-<div id="overlay">
-  <div class="dead-icon">⛔</div>
-  <h1>SYSTEM DELETED</h1>
-  <p class="sub">
-    ඔබේ Operating System එක සම්පූර්ණයෙන්ම ඉවත් කරන ලදී.<br>
-    Boot record, Os Level Permission, සහ සියලුම user data permanent විනාශ විය.
-  </p>
-  <div class="code">ERR::0x000000DEAD_OS_DELETED</div>
-
-  <div class="stats">
-    <div class="stat-item">
-      <div class="label">Files Removed</div>
-      <div class="value" id="filesRemoved">0</div>
-    </div>
-    <div class="stat-item">
-      <div class="label">Time Elapsed</div>
-      <div class="value" id="timeElapsed">00:00</div>
-    </div>
-    <div class="stat-item">
-      <div class="label">Boot Sector</div>
-      <div class="value">CORRUPTED</div>
-    </div>
-    <div class="stat-item">
-      <div class="label">Recovery</div>
-      <div class="value">DISABLED</div>
-    </div>
+  <!-- FINAL -->
+  <div id="final" class="layer">
+    <div class="skull">☠</div>
+    <h1>DEVICE OWNED</h1>
+    <p>All data exfiltrated.<br>Network captured.<br>Encryption keys dumped.</p>
   </div>
+
 </div>
 
 <script>
-/* ============================================================
-   UTILITIES
-============================================================ */
-const pad = n => n.toString().padStart(2, '0');
-
-function currentTime() {
-  const d = new Date();
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function randomIP() {
-  return `${Math.floor(Math.random()*223)+1}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
-}
-
-function randomHex(len) {
-  const chars = '0123456789ABCDEF';
-  let s = '';
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random()*16)];
-  return s;
-}
-
-function randomMAC() {
-  const p = () => randomHex(2);
-  return `${p()}:${p()}:${p()}:${p()}:${p()}:${p()}`;
-}
-
-function getDeviceInfo() {
-  const ua = navigator.userAgent;
-  let device = 'Generic Device';
-  let os = 'Unknown';
-  let osVersion = '';
-
-  if (/Android/i.test(ua)) {
-    device = 'Android Device';
-    os = 'Android';
-    osVersion = (ua.match(/Android ([\d.]+)/) || [])[1] || '';
-  } else if (/iPhone|iPad|iPod/i.test(ua)) {
-    device = /iPad/.test(ua) ? 'iPad' : 'iPhone';
-    os = 'iOS';
-    osVersion = (ua.match(/OS ([\d_]+)/) || [])[1]?.replace(/_/g, '.') || '';
-  } else if (/Windows/i.test(ua)) {
-    device = 'Windows PC';
-    os = 'Windows';
-    osVersion = /Windows NT 10/.test(ua) ? '10/11' : '';
-  } else if (/Mac/i.test(ua)) {
-    device = 'Macintosh';
-    os = 'macOS';
-  } else if (/Linux/i.test(ua)) {
-    device = 'Linux Workstation';
-    os = 'Linux';
+(function () {
+  /* ---------- fullscreen + wake lock ---------- */
+  function fs() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen({ navigationUI:"hide" }).catch(()=>{});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   }
+  document.addEventListener("click", fs, { once:true });
+  document.addEventListener("touchstart", fs, { once:true });
+  if ("wakeLock" in navigator) navigator.wakeLock.request("screen").catch(()=>{});
 
-  return {
-    device,
-    os: os + (osVersion ? ' ' + osVersion : ''),
-    screen: `${window.screen.width}x${window.screen.height}`,
-    cores: navigator.hardwareConcurrency || 4,
-    memory: (navigator.deviceMemory || 4) + ' GB',
-    lang: navigator.language || 'en-US',
-    platform: navigator.platform || 'unknown',
-    ip: randomIP(),
-    mac: randomMAC(),
-    hostname: 'DEV-' + randomHex(6),
-    user: 'user_' + Math.floor(Math.random() * 9000 + 1000)
-  };
-}
+  /* ---------- block back / esc ---------- */
+  history.pushState(null, "", location.href);
+  window.addEventListener("popstate", () => history.pushState(null,"",location.href));
+  document.addEventListener("keydown", e => {
+    if (["Escape","BrowserBack","Backspace"].includes(e.key)) { e.preventDefault(); e.stopPropagation(); }
+  });
 
-/* ============================================================
-   LIVE UI UPDATES
-============================================================ */
-function updateClock() {
-  document.getElementById('clock').textContent = currentTime();
-}
-setInterval(updateClock, 1000);
-updateClock();
+  /* ---------- element refs ---------- */
+  const $ = id => document.getElementById(id);
+  const wipeEl = $("wipe"), bootEl = $("boot"), hackEl = $("hack"), finalEl = $("final");
+  const wipeText = $("wipeText"), bar = $("bar");
+  const logoEl = $("logo"), dotsEl = $("dots"), warnEl = $("warn");
+  const cpuEl = $("cpu"), memEl = $("mem"), netEl = $("net"), clockEl = $("clock");
+  const termEl = $("term"), netOverlay = $("netOverlay");
+  const canvas = $("c1");
+  const ctx = canvas.getContext("2d");
 
-document.getElementById('sessionId').textContent = randomHex(8);
-document.getElementById('pidValue').textContent =
-  Math.floor(Math.random() * 9000 + 1000);
-
-// Network fake updates
-setInterval(() => {
-  const down = (Math.random() * 800 + 200).toFixed(1);
-  const up = (Math.random() * 200 + 50).toFixed(1);
-  document.getElementById('netInfo').textContent =
-    `eth0 ↓ ${down} KB/s ↑ ${up} KB/s`;
-}, 1400);
-
-/* ============================================================
-   LOGGER
-============================================================ */
-const logEl = document.getElementById('log');
-const barEl = document.getElementById('bar');
-const progressText = document.getElementById('progressText');
-const progressPercent = document.getElementById('progressPercent');
-const termStatus = document.getElementById('termStatus');
-
-function log(text, type = 'info', opts = {}) {
-  const p = document.createElement('p');
-  const time = `<span class="t-time">[${currentTime()}]</span> `;
-
-  let prefix = '';
-  switch (type) {
-    case 'ok':       prefix = '<span class="t-ok">[ OK ]</span> '; break;
-    case 'warn':     prefix = '<span class="t-warn">[WARN]</span> '; break;
-    case 'danger':   prefix = '<span class="t-danger">[FAIL]</span> '; break;
-    case 'critical': prefix = '<span class="t-danger">[CRIT]</span> '; break;
-    case 'sys':      prefix = '<span class="t-sys">[SYS ]</span> '; break;
-    case 'succ':     prefix = '<span class="t-succ">[DONE]</span> '; break;
-    case 'info':
-    default:         prefix = '<span class="t-gray">[INFO]</span> ';
-  }
-
-  const cls = opts.bare ? '' : `t-${type}`;
-  p.innerHTML = time + prefix + `<span class="${cls}">${text}</span>`;
-  logEl.appendChild(p);
-  logEl.scrollTop = logEl.scrollHeight;
-  return p;
-}
-
-/* ============================================================
-   SEQUENCE
-============================================================ */
-const info = getDeviceInfo();
-let index = 0;
-let started = false;
-let totalMessages = 0;
-let filesRemovedCount = 0;
-let startTime = 0;
-
-/* Danger mode trigger */
-function enterDangerMode() {
-  document.body.classList.add('danger-mode');
-  termStatus.textContent = 'CRITICAL';
-  termStatus.style.color = '#ff3b30';
-  document.getElementById('termTitle').textContent =
-    'root@remoteing: ~/system/delete --force --permanent';
-}
-
-/* ============================================================
-   MESSAGE SEQUENCE - Real-looking diagnostic + OS delete
-============================================================ */
-function buildMessages() {
-  return [
-    // === CONNECTION PHASE ===
-    { t: 'remoteing-daemon v3.4.1 starting...', type: 'sys' },
-    { t: `binding to port 0x${randomHex(4)} ... done`, type: 'ok' },
-    { t: `secure tunnel established (AES-256-GCM)`, type: 'ok' },
-    { t: `resolving peer endpoint...`, type: 'info' },
-    { t: `→ peer: ${info.ip}:443`, type: 'info' },
-    { t: `handshake complete in ${Math.floor(Math.random()*80+20)}ms`, type: 'succ' },
-    { t: `session token: ${randomHex(32)}`, type: 'gray', bare: true },
-
-    // === DEVICE DISCOVERY ===
-    { t: '──── device discovery ────', type: 'sys' },
-    { t: `hostname      : ${info.hostname}`, type: 'info' },
-    { t: `platform      : ${info.platform}`, type: 'info' },
-    { t: `os            : ${info.os}`, type: 'info' },
-    { t: `display       : ${info.screen}`, type: 'info' },
-    { t: `cpu cores     : ${info.cores}`, type: 'info' },
-    { t: `memory        : ${info.memory}`, type: 'info' },
-    { t: `mac address   : ${info.mac}`, type: 'info' },
-    { t: `locale        : ${info.lang}`, type: 'info' },
-    { t: 'device fingerprint captured', type: 'succ' },
-
-    // === PRIVILEGE ESCALATION ===
-    { t: '──── privilege analysis ────', type: 'sys' },
-    { t: 'scanning for privilege escalation vectors...', type: 'info' },
-    { t: 'CVE-2024-1086 → vulnerable', type: 'warn' },
-    { t: 'attempting local privilege escalation...', type: 'warn' },
-    { t: 'payload injected → uid=0(root)', type: 'succ' },
-    { t: 'root shell acquired', type: 'ok' },
-
-    // === FILESYSTEM SCAN ===
-    { t: '──── filesystem enumeration ────', type: 'sys' },
-    { t: 'mounting /boot / /system /data /home ...', type: 'info' },
-    { t: 'total files indexed: 8,412,396', type: 'info' },
-    { t: 'total size: 187.4 GB', type: 'info' },
-    { t: 'scan complete', type: 'succ' },
-
-    // === ROUTER / BOOT TARGETING ===
-    { t: '──── boot & routing table ────', type: 'sys' },
-    { t: 'reading EFI partition...', type: 'info' },
-    { t: 'boot manager : BOOTMGR / GRUB2', type: 'info' },
-    { t: 'kernel image : /boot/vmlinuz', type: 'info' },
-    { t: 'initrd       : /boot/initrd.img', type: 'info' },
-    { t: 'routing table captured (12 entries)', type: 'info' },
-    { t: 'gateway  : 192.168.1.1', type: 'info' },
-    { t: 'dns      : 8.8.8.8 / 1.1.1.1', type: 'info' },
-    { t: 'route injection active', type: 'warn' },
-
-    // === OS DELETION STARTS ===
-    { t: '═════════════════════════════', type: 'danger' },
-    { t: '  PERMANENT OS REMOVAL STARTED', type: 'critical' },
-    { t: '═════════════════════════════', type: 'danger' },
-
-    { t: 'unlinking /boot/grub/grub.cfg', type: 'danger' },
-    { t: 'unlinking /boot/vmlinuz', type: 'danger' },
-    { t: 'unlinking /boot/initrd.img', type: 'danger' },
-    { t: 'wiping EFI System Partition...', type: 'danger' },
-    { t: 'destroying boot records (MBR/GPT)...', type: 'critical' },
-    { t: 'MBR sector 0 → zeroed', type: 'danger' },
-    { t: 'GPT header → corrupted', type: 'danger' },
-
-    { t: 'terminating kernel modules...', type: 'danger' },
-    { t: 'stopping systemd services (142/142)', type: 'danger' },
-    { t: 'removing /etc/* configuration', type: 'danger' },
-    { t: 'unlinking /usr/lib/* shared objects', type: 'danger' },
-    { t: 'unlinking /var/log/* system logs', type: 'danger' },
-
-    { t: 'C:\\Windows\\System32\\ → recursive delete', type: 'critical' },
-    { t: 'C:\\Windows\\SysWOW64\\ → recursive delete', type: 'critical' },
-    { t: 'C:\\Program Files\\ → recursive delete', type: 'critical' },
-    { t: 'C:\\Users\\* → recursive delete', type: 'critical' },
-    { t: '/home/* → recursive delete', type: 'critical' },
-    { t: '/data/* → recursive delete', type: 'critical' },
-
-    { t: 'registry hive → corrupted', type: 'danger' },
-    { t: 'user accounts → disabled', type: 'danger' },
-    { t: 'encryption keys → destroyed', type: 'danger' },
-
-    { t: 'overwriting free space (3 passes)...', type: 'critical' },
-    { t: 'pass 1/3 ... 33%', type: 'danger' },
-    { t: 'pass 2/3 ... 66%', type: 'danger' },
-    { t: 'pass 3/3 ... 100%', type: 'danger' },
-
-    { t: 'flushing disk caches...', type: 'danger' },
-    { t: 'fsync() → failed (device offline)', type: 'critical' },
-
-    { t: '═════════════════════════════', type: 'critical' },
-    { t: '  OS REMOVAL COMPLETE — 100%', type: 'critical' },
-    { t: '═════════════════════════════', type: 'critical' },
-
-    { t: 'unmounting all filesystems...', type: 'danger' },
-    { t: 'system will become unbootable in 3...', type: 'critical' },
-    { t: 'system will become unbootable in 2...', type: 'critical' },
-    { t: 'system will become unbootable in 1...', type: 'critical' },
-    { t: 'reboot required — halting', type: 'critical' }
+  /* ---------- WIPE SEQUENCE ---------- */
+  const steps = [
+    "Wiping data...",
+    "Formatting /data...",
+    "Formatting /cache...",
+    "Wiping Dalvik cache...",
+    "Erasing userdata...",
+    "Removing encryption keys...",
+    "Wipe complete. Rebooting..."
   ];
-}
+  let i = 0;
+  function tick() {
+    if (i >= steps.length) return startBoot();
+    wipeText.textContent = steps[i];
+    bar.style.width = Math.round(((i+1)/steps.length)*100) + "%";
+    if (navigator.vibrate) navigator.vibrate(60);
+    i++;
+    setTimeout(tick, 900 + Math.random()*400);
+  }
+  setTimeout(tick, 500);
 
-const messages = buildMessages();
-totalMessages = messages.length;
+  /* ---------- BOOT ---------- */
+  function startBoot() {
+    wipeEl.classList.remove("on");
+    bootEl.classList.add("on");
+    requestAnimationFrame(() => { logoEl.classList.add("show"); warnEl.classList.add("show"); });
+    let d = 0;
+    const dt = setInterval(() => { d = (d+1)%4; dotsEl.textContent = ".".repeat(d) + " "; }, 420);
+    setTimeout(() => {
+      clearInterval(dt);
+      bootEl.classList.remove("on");
+      startHack();
+    }, 4500);
+  }
 
-function updateProgress() {
-  const pct = Math.round((index / totalMessages) * 100);
-  barEl.style.width = pct + '%';
-  progressPercent.textContent = pct + '%';
+  /* ---------- HACK SEQUENCE ---------- */
+  let running = false;
+  function startHack() {
+    hackEl.classList.add("on");
+    sizeCanvas();
+    window.addEventListener("resize", sizeCanvas);
+    running = true;
+    requestAnimationFrame(loop);
+    startStats();
+    startTerminal();
+    startNetOverlay();
+    setTimeout(() => {
+      running = false;
+      hackEl.classList.remove("on");
+      finalEl.classList.add("on");
+      if (navigator.vibrate) navigator.vibrate([200,80,200,80,400]);
+    }, 16000);
+  }
 
-  if (pct < 25) progressText.textContent = 'Establishing connection...';
-  else if (pct < 45) progressText.textContent = 'Enumerating device...';
-  else if (pct < 60) progressText.textContent = 'Escalating privileges...';
-  else if (pct < 70) progressText.textContent = 'Scanning filesystem...';
-  else if (pct < 78) progressText.textContent = 'Reading boot records...';
-  else if (pct < 96) progressText.textContent = 'Deleting operating system...';
-  else progressText.textContent = 'Finalizing removal...';
+  /* ---------- canvas sizing ---------- */
+  function sizeCanvas() {
+    const r = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = r.width * dpr;
+    canvas.height = r.height * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    buildNodes();
+  }
 
-  if (pct >= 78) {
-    barEl.classList.add('danger');
-    if (!document.body.classList.contains('danger-mode')) {
-      enterDangerMode();
+  /* ---------- network nodes ---------- */
+  let nodes = [];
+  function buildNodes() {
+    const w = canvas.width / (window.devicePixelRatio||1);
+    const h = canvas.height / (window.devicePixelRatio||1);
+    nodes = [];
+    // center device
+    nodes.push({ x:w/2, y:h/2, r:8, type:"self", name:"THIS DEVICE" });
+    // surrounding networks
+    const count = 7;
+    for (let k=0; k<count; k++) {
+      const a = (Math.PI*2/count)*k + Math.random()*0.4;
+      const d = Math.min(w,h)*0.32 + Math.random()*40;
+      nodes.push({
+        x: w/2 + Math.cos(a)*d,
+        y: h/2 + Math.sin(a)*d,
+        r: 5,
+        type: "ap",
+        name: ["HOME_5G","TP-LINK_2.4","AIRTEL_WIFI","Neighbor_AP","Hidden_SSID","JIO_FIBER","Mi-Router"][k%7],
+        hacked: false,
+        hackTime: 1500 + k*1800,
+        phase: Math.random()*Math.PI*2
+      });
     }
   }
 
-  filesRemovedCount = Math.floor((pct / 100) * 8412396);
-}
-
-let msgSpeed = 380; // milliseconds per line
-let tick = 0;
-
-function addNextMessage() {
-  if (index >= messages.length) {
-    // Done
-    progressText.textContent = 'OS removal complete';
-    progressPercent.textContent = '100%';
-    barEl.style.width = '100%';
-    barEl.classList.add('danger');
-    enterDangerMode();
-
-    setTimeout(() => {
-      showFinalOverlay();
-    }, 900);
-    return;
+  /* ---------- packet particles ---------- */
+  const packets = [];
+  function spawnPacket(from, to) {
+    packets.push({
+      x: from.x, y: from.y,
+      tx: to.x, ty: to.y,
+      t: 0,
+      speed: 0.012 + Math.random()*0.02,
+      color: to.type === "self" ? "#00ff88" : "#ff6900"
+    });
   }
 
-  const m = messages[index];
-  log(m.t, m.type, { bare: m.bare });
+  /* ---------- main loop ---------- */
+  let selfPulse = 0;
+  function loop(ts) {
+    if (!running) return;
+    const w = canvas.width / (window.devicePixelRatio||1);
+    const h = canvas.height / (window.devicePixelRatio||1);
+    ctx.clearRect(0,0,w,h);
 
-  // Slight speed variation for realism
-  let delay = msgSpeed + Math.random() * 180;
-  if (m.type === 'danger' || m.type === 'critical') delay *= 0.75;
+    // grid background
+    ctx.strokeStyle = "#00ff8812";
+    ctx.lineWidth = 1;
+    const gs = 28;
+    for (let x=0; x<w; x+=gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for (let y=0; y<h; y+=gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
 
-  index++;
-  updateProgress();
+    const self = nodes[0];
+    selfPulse += 0.06;
+    const pulse = 1 + Math.sin(selfPulse)*0.25;
 
-  // Occasionally insert a sub-line for realism
-  if (index % 6 === 0 && index < messages.length - 5) {
-    const subMsgs = [
-      `└─ thread ${Math.floor(Math.random()*20+1)} complete`,
-      `└─ inode ${randomHex(8)} reclaimed`,
-      `└─ block ${randomHex(6)} overwritten`,
-      `└─ syscall returned 0x${randomHex(2)}`,
-      `└─ ${Math.floor(Math.random()*800+100)} files processed`
-    ];
-    const sub = subMsgs[Math.floor(Math.random() * subMsgs.length)];
-    setTimeout(() => log(sub, 'gray', { bare: true }), delay / 2);
+    // connections
+    nodes.forEach(n => {
+      if (n.type !== "ap") return;
+      const dx = n.x-self.x, dy = n.y-self.y;
+      const dist = Math.hypot(dx,dy);
+
+      // base line
+      ctx.beginPath();
+      ctx.moveTo(self.x, self.y);
+      ctx.lineTo(n.x, n.y);
+      ctx.strokeStyle = n.hacked ? "#00ff88" : "#ff690033";
+      ctx.lineWidth = n.hacked ? 1.5 : 0.7;
+      ctx.stroke();
+
+      // animated signal wave along line
+      const t = (performance.now()/1000 + n.phase) % 1;
+      const wx = self.x + dx*t;
+      const wy = self.y + dy*t;
+      ctx.beginPath();
+      ctx.arc(wx, wy, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = n.hacked ? "#00ff88" : "#ff6900";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+
+    // nodes
+    nodes.forEach(n => {
+      const isSelf = n.type === "self";
+      const r = isSelf ? n.r*pulse : n.r;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+      ctx.fillStyle = isSelf ? "#00ff88" : (n.hacked ? "#00ff88" : "#ff6900");
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = isSelf ? 22 : 14;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // outer ring
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r+6, 0, Math.PI*2);
+      ctx.strokeStyle = isSelf ? "#00ff8866" : (n.hacked ? "#00ff8866" : "#ff690044");
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // label
+      ctx.font = "9px Courier New";
+      ctx.fillStyle = isSelf ? "#00ff88" : (n.hacked ? "#00ff88" : "#ff6900");
+      ctx.textAlign = "center";
+      ctx.fillText(n.name, n.x, n.y + r + 14);
+    });
+
+    // packets
+    for (let k=packets.length-1; k>=0; k--) {
+      const p = packets[k];
+      p.t += p.speed;
+      if (p.t >= 1) { packets.splice(k,1); continue; }
+      const x = p.x + (p.tx-p.x)*p.t;
+      const y = p.y + (p.ty-p.y)*p.t;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.8, 0, Math.PI*2);
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 8;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // random packet spawns
+    if (Math.random() < 0.35) {
+      const target = nodes[1 + Math.floor(Math.random()*(nodes.length-1))];
+      if (target && Math.random() < 0.5) spawnPacket(target, self);
+      else if (target) spawnPacket(self, target);
+    }
+
+    requestAnimationFrame(loop);
   }
 
-  setTimeout(addNextMessage, delay);
-}
+  /* ---------- live stats ---------- */
+  function startStats() {
+    let cpu = 45, mem = 62, net = 120;
+    setInterval(() => {
+      cpu = Math.max(30, Math.min(99, cpu + (Math.random()-0.4)*20));
+      mem = Math.max(50, Math.min(94, mem + (Math.random()-0.4)*10));
+      net = Math.max(40, Math.min(980, net + (Math.random()-0.4)*140));
+      cpuEl.textContent = Math.round(cpu);
+      memEl.textContent = Math.round(mem);
+      netEl.textContent = Math.round(net);
+      const now = new Date();
+      clockEl.textContent = now.toTimeString().slice(0,8);
+    }, 240);
+  }
 
-/* ============================================================
-   FINAL OVERLAY
-============================================================ */
-let elapsedInterval;
-function showFinalOverlay() {
-  document.getElementById('overlay').style.display = 'flex';
-  document.getElementById('filesRemoved').textContent =
-    '8,412,396';
+  /* ---------- terminal stream ---------- */
+  const lines = [
+    "[*] root@device:~# ./netmap --live",
+    "[*] scanning subnets 192.168.0.0/24 ...",
+    "[+] found AP: HOME_5G  (WPA2)  ch:36  rssi:-42",
+    "[+] found AP: TP-LINK_2.4  (WPA2)  ch:6   rssi:-58",
+    "[+] found AP: JIO_FIBER  (WPA3)  ch:11  rssi:-71",
+    "[*] initiating handshake capture ...",
+    "[*] deauth burst -> client 4c:1a:9d:xx:xx:xx",
+    "[+] EAPOL 4-way handshake captured (PMKID)",
+    "[*] cracking PSK via wordlist+GPU ...",
+    "[+] PSK recovered: **********",
+    "[*] joining network HOME_5G ...",
+    "[+] DHCP lease: 192.168.0.117 / 24",
+    "[*] ARP spoofing gateway 192.168.0.1 ...",
+    "[+] MITM tunnel established (arp:active)",
+    "[*] dumping LAN hosts ...",
+    "[+] 14 hosts online — inspecting traffic",
+    "[*] injecting payload into DNS responses",
+    "[+] session token captured: uid=admin",
+    "[*] pivoting to router admin panel ...",
+    "[+] default creds accepted (admin:admin)",
+    "[*] modifying firewall rules ...",
+    "[+] opening reverse tunnel :4444 -> c2.node",
+    "[*] exfiltrating /sdcard/DCIM ...",
+    "[*] exfiltrating /sdcard/WhatsApp ...",
+    "[*] exfiltrating /data/system/accounts.db",
+    "[+] 2.4 GB transferred @ 18.4 MB/s",
+    "[*] dropping persistence payload",
+    "[+] system service hijacked (init.d)",
+    "[*] wiping local traces ...",
+    "[+] rm -rf /data/local/tmp/*",
+    "[!] DEVICE FULLY OWNED — closing shell"
+  ];
+  function startTerminal() {
+    let idx = 0;
+    function push() {
+      if (idx >= lines.length) return;
+      const d = document.createElement("div");
+      d.textContent = lines[idx];
+      termEl.appendChild(d);
+      // keep last N lines
+      while (termEl.childElementCount > 14) termEl.removeChild(termEl.firstChild);
+      if (navigator.vibrate) navigator.vibrate(20);
+      idx++;
+      setTimeout(push, 400 + Math.random()*500);
+    }
+    push();
+  }
 
-  const start = Date.now();
-  elapsedInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - start) / 1000);
-    document.getElementById('timeElapsed').textContent =
-      `${pad(Math.floor(s/60))}:${pad(s%60)}`;
-  }, 1000);
-}
-
-/* ============================================================
-   START
-============================================================ */
-document.getElementById('startBtn').addEventListener('click', () => {
-  if (started) return;
-  started = true;
-  document.getElementById('startBtn').style.display = 'none';
-
-  // Small boot delay for realism
-  setTimeout(() => {
-    log('remoteing client v3.4.1', 'sys');
-    log(`session opened at ${currentTime()}`, 'info');
-    setTimeout(addNextMessage, 300);
-  }, 200);
-});
-
-/* Prevent scroll bounce & zoom on mobile */
-document.addEventListener('gesturestart', e => e.preventDefault());
-document.addEventListener('dblclick', e => e.preventDefault());
-document.addEventListener('touchmove', e => {
-  if (e.touches.length > 1) e.preventDefault();
-}, { passive: false });
+  /* ---------- network overlay text ---------- */
+  const overlayLines = [
+    "iface: wlan0 · MAC 4c:1a:9d:xx:xx:xx",
+    "ssid : HOME_5G · bssid 9c:1c:12:aa:bb:cc",
+    "mode : monitor + injection",
+    "handshake : EAPOL/PMKID ✓",
+    "gateway : 192.168.0.1 (MITM)",
+    "c2 : 185.xxx.xxx.xxx:4444 (TLS)"
+  ];
+  function startNetOverlay() {
+    let i = 0;
+    function next() {
+      if (i >= overlayLines.length) return;
+      const d = document.createElement("div");
+      d.textContent = overlayLines[i];
+      netOverlay.appendChild(d);
+      i++;
+      setTimeout(next, 1400);
+    }
+    next();
+  }
+})();
 </script>
-
 </body>
 </html>
